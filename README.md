@@ -104,7 +104,7 @@ Pre-trained models and complete training code are available at:
 
 The Google Drive folder contains:
 - Complete training code and configurations
-- Pre-trained model weights
+- Pre-trained weights
 - Full training datasets
 
 
