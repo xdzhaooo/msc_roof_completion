@@ -1,0 +1,129 @@
+name: roof_completion
+gpu_ids: [0]
+seed: 100
+finetune_norm: true
+# controlnet_training: true
+
+path:
+  base_dir: experiments
+  code: code
+  tb_logger: tb_logger
+  results: results
+  checkpoint: checkpoint
+  pretrained_models: pretrained_models
+  resume_path: './mom/2_Network.pth'
+  #resume_path_all: "resume"
+
+pretrained_model_paths:
+  roof_path: "roof/2_Network.pth"
+  roofline_path: "roofline/5_Network.pth"
+
+datasets:
+  train:
+    which_dataset:
+      name: ["data.dataset", "RoofDataset"]
+      args:
+        data_root: "./dataset/fix128/heightmap.flist"
+        corrupted_root: "./dataset/fix128/corrupt.flist"
+        footprint_root: "./dataset/fix128/footprint.flist"
+        roofline_root: "./dataset/fix128/edge.flist"
+        data_len: -1
+        use_footprint: true
+        mask_config:
+          down_res_pct: [90, 60, 30, 15]
+          local_remove: [[0.0, 0.0, 0],[0.15,0.25,4]]
+        data_aug:
+          rotate: 90
+        footprint_as_mask: true
+    dataloader:
+      validation_split: 2
+      args:
+        batch_size: 2
+        num_workers: 12
+        shuffle: true
+        pin_memory: true
+        drop_last: true
+      val_args:
+        batch_size: 2
+        num_workers: 12
+        shuffle: false
+        pin_memory: true
+        drop_last: false
+  test:
+    which_dataset:
+      name: "RoofDataset"
+      args:
+        data_root: "./dataset/PoznanRD/test_img.flist"
+        footprint_root: "./dataset/PoznanRD/test_footprint.flist"
+        footprint_as_mask: true
+        use_footprint: true
+    dataloader:
+      args:
+        batch_size: 2
+        num_workers: 8
+        pin_memory: true
+
+model:
+  which_model:
+    name: ["mom_models.model_copy", "Trainer"]
+    args:
+      sample_num: 8
+      task: inpainting
+      ema_scheduler:
+        ema_start: 1
+        ema_iter: 1
+        ema_decay: 0.9999
+      optimizers:
+        - lr: 2e-4
+          weight_decay: 0.00
+      lr_schedulers:
+        - start_factor: 0.1
+          total_iters: 20
+  which_networks:
+    - name: ["mom_models.network", "Network"]
+      args:
+        init_type: kaiming
+        module_name: mom_modules
+        unetMom:
+          in_channel: 3
+          out_channel: 1
+          inner_channel: 64
+          channel_mults: [1,2,4]
+          attn_res: [2,4]
+          num_heads: 1
+          num_head_channels: 32
+          res_blocks: 1
+          dropout: 0.2
+          image_size: 128
+          cond_cross_dim: 2
+          use_checkpoint: false  # Disable gradient checkpointing
+        beta_schedule:
+          train:
+            schedule: cosine
+            n_timestep: 2000
+            linear_start: 0.000001
+            linear_end: 0.01
+          test:
+            schedule: cosine
+            n_timestep: 1000
+            linear_start: 1e-4
+            linear_end: 0.09
+  which_losses:
+    - masked_l1_loss
+  which_metrics:
+    - mae
+
+
+train:
+  n_epoch: 100000000
+  n_iter: 100000000
+  val_epoch: 1
+  save_checkpoint_epoch: 1
+  log_iter: 8
+  tensorboard: true
+
+debug:
+  val_epoch: 1
+  save_checkpoint_epoch: 1
+  log_iter: 2
+  debug_split: 50

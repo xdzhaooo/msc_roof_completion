@@ -1,0 +1,197 @@
+{
+    "name": "finetune_roof_completion",
+    "gpu_ids": [
+        0
+    ],
+    "seed": 100,
+    "finetune_norm": true,
+    "path": {
+        "base_dir": "experiments",
+        "code": "code",
+        "tb_logger": "tb_logger",
+        "results": "results",
+        "checkpoint": "checkpoint",
+        "resume_state": 3
+    },
+    "datasets": {
+        "train": {
+            "which_dataset": {
+                "name": [
+                    "data.dataset",
+                    "RoofDataset"
+                ],
+                "args": {
+                    "data_root": "./dataset/fix128/heightmap.flist",
+                    "corrupted_root": "./dataset/fix128/corrupt.flist",
+                    "footprint_root": "./dataset/fix128/footprint.flist",
+                    "control_root": "./dataset/fix128/edge.flist",
+                    "data_len": -1,
+                    "use_footprint": true,
+                    "mask_config": {
+                        "down_res_pct": [
+                            90,
+                            70,
+                            40,
+                            25
+                        ],
+                        "local_remove": [
+                            [
+                                0.0,
+                                0.0,
+                                0
+                            ],
+                            [
+                                0.15,
+                                0.3,
+                                5
+                            ]
+                        ]
+                    },
+                    "data_aug": {
+                        "rotate": 90
+                    },
+                    "footprint_as_mask": true
+                }
+            },
+            "dataloader": {
+                "validation_split": 32,
+                "args": {
+                    "batch_size": 32,
+                    "num_workers": 12,
+                    "shuffle": true,
+                    "pin_memory": true,
+                    "drop_last": true
+                },
+                "val_args": {
+                    "batch_size": 16,
+                    "num_workers": 12,
+                    "shuffle": false,
+                    "pin_memory": true,
+                    "drop_last": false
+                }
+            }
+        },
+        "test": {
+            "which_dataset": {
+                "name": "RoofDataset",
+                "args": {
+                    "data_root": "./dataset/PoznanRD/test_img.flist",
+                    "footprint_root": "./dataset/PoznanRD/test_footprint.flist",
+                    "footprint_as_mask": true,
+                    "use_footprint": true
+                }
+            },
+            "dataloader": {
+                "args": {
+                    "batch_size": 2,
+                    "num_workers": 8,
+                    "pin_memory": true
+                }
+            }
+        }
+    },
+    "model": {
+        "which_model": {
+            "name": [
+                "models.model",
+                "Palette"
+            ],
+            "args": {
+                "sample_num": 0,
+                "task": "inpainting",
+                "optimizers": [
+                    {
+                        "lr": 0.0001,
+                        "weight_decay": 0.0
+                    }
+                ],
+                "lr_schedulers": [
+                    {
+                        "start_factor": 0.1,
+                        "total_iters": 1000
+                    }
+                ]
+            }
+        },
+        "which_networks": [
+            {
+                "name": [
+                    "models.network",
+                    "Network"
+                ],
+                "args": {
+                    "init_type": "kaiming",
+                    "module_name": "roof_modules",
+                    "unet": {
+                        "in_channel": 2,
+                        "out_channel": 1,
+                        "inner_channel": 64,
+                        "channel_mults": [
+                            1,
+                            2,
+                            4,
+                            8
+                        ],
+                        "attn_res": [
+                            4,
+                            8
+                        ],
+                        "num_heads": 4,
+                        "num_head_channels": 32,
+                        "res_blocks": 2,
+                        "dropout": 0.2,
+                        "image_size": 128
+                    },
+                    "beta_schedule": {
+                        "train": {
+                            "schedule": "cosine",
+                            "n_timestep": 2000,
+                            "linear_start": 1e-06,
+                            "linear_end": 0.01
+                        },
+                        "test": {
+                            "schedule": "linear",
+                            "n_timestep": 1000,
+                            "linear_start": 0.0001,
+                            "linear_end": 0.09
+                        }
+                    },
+                    "init_cond_net": {
+                        "embed_dim": 64,
+                        "depths": [2, 1],
+                        "num_heads": [2, 4],
+                        "window_size": [4, 4],
+                        "mlp_ratio": 4.0,
+                        "dropout": 0.0,
+                        "attention_dropout": 0.0,
+                        "stochastic_depth_prob": 0.1,
+                        "num_classes": 1000,
+                        "in_channels": 1
+                    }
+                }
+            }
+        ],
+        "which_losses": [
+            "masked_l1_loss_samplewise"
+        ],
+        "which_metrics": [
+            "mae"
+        ]
+    },
+    "train": {
+        "n_epoch": 100000000.0,
+        "n_iter": 100000000.0,
+        "val_epoch": 1,
+        "save_checkpoint_epoch": 1,
+        "log_iter": 10,
+        "tensorboard": true
+    },
+    "debug": {
+        "val_epoch": 1,
+        "save_checkpoint_epoch": 1,
+        "log_iter": 2,
+        "debug_split": 50
+    },
+    "phase": "train",
+    "distributed": false
+}

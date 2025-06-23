@@ -1,0 +1,45 @@
+# 排除大于50MB的文件
+*.zip
+*.pth
+*.ckpt
+*.model
+*.weights
+
+# 排除特定的大文件目录
+datasets/benchmarks/dynamic_resolution/
+datasets/full_trainset/
+datasets/small_trainset/
+
+# 排除模型权重文件
+**/2_Network.pth
+**/5_Network.pth
+**/30_Network.pth
+**/30_Network_ema.pth
+**/checkpoint_epoch_15.pth
+**/encoder_weights_checkpoint_epoch_15.pth
+
+# Python 缓存文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# 系统文件
+.DS_Store
+Thumbs.db
+*.tmp
+*.temp
+
+# 编辑器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 日志文件
+*.log
+
+# 其他临时文件
+*.blend1 

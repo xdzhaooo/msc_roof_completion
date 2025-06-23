@@ -1,0 +1,60 @@
+from utils.file_utils import scan_files, write_to_png
+from utils.mesh_footprintProcessor import project_mesh_to_xy
+from utils.lasProcessor import convert_las_to_roof
+import numpy as np
+import os
+import pandas as pd
+import trimesh
+
+
+# scan files
+# path2 = r"D:\BuildingPccdata\Rotterdam_processed\output_all\matched_gt_model"
+# path1 = r"D:\BuildingPccdata\Rotterdam_processed\output_all\matched_ahn4_pcl"
+path1 =  r"D:\BuildingPccdata\DenHaag_processed\output_all\matched_ahn4_pcl"
+path2 = r"D:\BuildingPccdata\DenHaag_processed\output_all\matched_gt_model"
+
+files = scan_files(path1, path2) #path1: las, path2: ply
+
+df = pd.DataFrame(columns=["filename", "mesh_faces", "sparsity_rate", "slop_ratio"])
+df = pd.read_parquet(r"D:\thesis\progress\12.15\incomplete(0.15).parquet")
+
+df =df[df["city"]=="denhaag"]
+
+print(len(df))
+files = df.to_dict(orient='index')  # 默认每行是一个子字典
+output_path = r"D:\thesis\progress\12.15\incomplete\denhaag"
+# Initialize a list for rows
+for k, v in files.items():
+    
+    #laspath = v[path1+"/"+"file_name"+ ".las"]
+    laspath = os.path.join(path1, v["filename"]+".las")
+    #plypath = v[path2+"/"+"file_name"+ ".ply"]
+    plypath = os.path.join(path2, v["filename"]+".ply")
+
+    #adaptive resolution
+    mesh = trimesh.load_mesh(plypath)
+        # get the bounding box
+    bounds = mesh.bounds  # [[min_x, min_y, min_z], [max_x, max_y, max_z]]
+    min_x, min_y = bounds[0][:2]
+    max_x, max_y = bounds[1][:2]
+    # define the resolution of the grid and the size of each pixel
+    x_range = max_x - min_x
+    y_range = max_y - min_y
+    max_range = max(x_range, y_range)
+    resolution = (max_range / 0.3).astype(int)
+
+    # project mesh to xy plane
+    footprint_np, mesh_faces,slop_ratio = project_mesh_to_xy(plypath, resolution=resolution)
+    footprint_np = footprint_np[::-1]  # flip the image
+    write_to_png(footprint_np*255, os.path.join(output_path, str(v["sparsity_rate"])+v["filename"]+".png"), mode='L')
+
+    # convert las to roof
+    las_roof_np = convert_las_to_roof(laspath, resolution=resolution)
+    las_roof_np = las_roof_np[::-1]  # flip the image
+    
+    write_to_png(las_roof_np, os.path.join(output_path, str(v["sparsity_rate"])+v["filename"]+"_roof.png"), mode='L')
+    las_roof_np[las_roof_np != 0] = 255
+    write_to_png(las_roof_np, os.path.join(output_path, str(v["sparsity_rate"])+v["filename"]+"_roof_binary.png"), mode='L')
+
+    sparsity = np.logical_and(footprint_np, las_roof_np)
+    sparsity_rate = 1-np.sum(sparsity) / np.sum(footprint_np)

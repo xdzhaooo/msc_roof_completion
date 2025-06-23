@@ -1,0 +1,139 @@
+import bpy
+import bmesh
+import os
+import time
+from mathutils import Vector
+
+# 清空场景的函数
+def clear_scene():
+    bpy.ops.object.select_all(action='SELECT')
+    bpy.ops.object.delete()
+
+# 记录时间的函数
+def log_time(start_time, task_name, ply_path=None):
+    elapsed = time.time() - start_time
+    minutes, seconds = divmod(elapsed, 60)
+    if ply_path:
+        print(f"{task_name} for {ply_path}: {int(minutes)}m {seconds:.2f}s")
+    else:
+        print(f"{task_name}: {int(minutes)}m {seconds:.2f}s")
+    return time.time()
+
+# 检查暂停标志的函数
+def check_pause():
+    pause_file = "pause_render.txt"
+    if os.path.exists(pause_file):
+        print("Pause requested. Waiting...")
+        while os.path.exists(pause_file):
+            time.sleep(1)  # 每秒检查一次
+        print("Resuming...")
+    return False
+
+# 渲染函数
+def render_ply(ply_path, resolution, output_path):
+    start_time = time.time()
+    
+    # 检查暂停
+    if check_pause():
+        return False
+    
+    clear_scene()
+    
+    # 读取PLY文件
+    try:
+        bpy.ops.wm.ply_import(filepath=ply_path)
+    except Exception as e:
+        print(f"Failed to import {ply_path}: {e}")
+        return False
+    
+    # 获取模型
+    if not bpy.context.selected_objects:
+        print(f"No objects imported from {ply_path}")
+        return False
+    model = bpy.context.selected_objects[0]
+    bpy.context.view_layer.objects.active = model
+    
+    # 计算模型最高点
+    bm = bmesh.new()
+    bm.from_mesh(model.data)
+    bmesh.ops.transform(bm, matrix=model.matrix_world, verts=bm.verts)
+    coords = [v.co for v in bm.verts]
+    bm.free()
+    if not coords:
+        print(f"No vertices found in {ply_path}")
+        return False
+    max_coord = Vector((max(c[i] for c in coords) for i in range(3)))
+    model_height = max_coord.z
+    
+    # 将resolution文本转为数字（假设单个数值，如"1024.0"）
+    try:
+        res_value = float(resolution)
+        res_x = res_y = int(res_value)
+    except ValueError:
+        print(f"Invalid resolution format: {resolution}, skipping {ply_path}")
+        return False
+    
+    # 设置渲染分辨率
+    scene = bpy.context.scene
+    scene.render.resolution_x = res_x
+    scene.render.resolution_y = res_y
+    scene.render.resolution_percentage = 100
+    
+    # 计算正交相机视野（1像素 = 1/8米）
+    pixels_per_meter = 8
+    ortho_scale = res_x / pixels_per_meter
+    
+    # 设置相机
+    if "Camera" in bpy.data.objects:
+        cam = bpy.data.objects["Camera"]
+    else:
+        cam_data = bpy.data.cameras.new("Camera")
+        cam = bpy.data.objects.new("Camera", cam_data)
+        scene.collection.objects.link(cam)
+    
+    cam.data.type = 'ORTHO'
+    cam.data.ortho_scale = ortho_scale
+    cam.location = (0, 0, model_height)
+    cam.rotation_euler = (0, 0, 0)
+    scene.camera = cam
+    
+    # 设置渲染引擎和输出
+    scene.render.engine = 'CYCLES'  # 可改为'EEVEE'
+    scene.render.image_settings.file_format = 'PNG'
+    scene.render.filepath = output_path
+    
+    # 渲染
+    try:
+        bpy.ops.render.render(write_still=True)
+    except Exception as e:
+        print(f"Rendering failed for {ply_path}: {e}")
+        return False
+    
+    # 记录渲染时间
+    log_time(start_time, "Rendering", ply_path)
+    return True
+
+# 设置根文件夹路径
+root_folder = "D:/thesis/progress/3.15/dynamicresolution"  # 请确认路径
+
+# 记录总开始时间
+total_start_time = time.time()
+
+# 遍历文件夹并渲染
+for resolution in os.listdir(root_folder):
+    resolution_path = os.path.join(root_folder, resolution)
+    if os.path.isdir(resolution_path):
+        centered_mesh_path = os.path.join(resolution_path, "centeredMesh")
+        if os.path.isdir(centered_mesh_path):
+            for file_name in os.listdir(centered_mesh_path):
+                if file_name.lower().endswith('.ply'):
+                    ply_path = os.path.join(centered_mesh_path, file_name)
+                    output_dir = os.path.join(resolution_path, "output")
+                    os.makedirs(output_dir, exist_ok=True)
+                    output_path = os.path.join(output_dir, f"{os.path.splitext(file_name)[0]}.png")
+                    print(f"Processing: {ply_path} at {resolution}")
+                    if not render_ply(ply_path, resolution, output_path):
+                        print(f"Skipped or paused at {ply_path}")
+
+# 记录总运行时间
+log_time(total_start_time, "Total execution")
